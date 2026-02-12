@@ -1,0 +1,93 @@
+.private-chat-container {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 16px;
+  border-radius: 12px;
+
+  /* background image ke upar readable banane ke liye */
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+
+  color: #fff;
+}
+
+.private-chat-title {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.private-chat-to-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.to-user-input {
+  width: 60px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: none;
+  outline: none;
+}
+
+.chat-messages-box {
+  height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 10px;
+
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-message-row {
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.chat-username {
+  font-weight: 600;
+  margin-right: 6px;
+  color: #00e5ff;
+}
+
+.chat-text {
+  color: #fff;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+
+  /* important part – background image text box me na dikhe */
+  background: #ffffff;
+  color: #000;
+}
+
+.chat-input::placeholder {
+  color: #666;
+}
+
+.chat-send-btn {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+
+  background: #00bcd4;
+  color: #000;
+  font-weight: 600;
+}
+
+.chat-send-btn:hover {
+  background: #00acc1;
+}

@@ -1,0 +1,79 @@
+.call-panel {
+  width: 100%;
+  max-width: 320px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  font-family: sans-serif;
+}
+
+.call-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.call-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #eee;
+}
+
+.call-status.connected {
+  background: #d4f5dd;
+  color: #1c7c3a;
+}
+
+.call-status.disconnected {
+  background: #f5d4d4;
+  color: #8a1f1f;
+}
+
+.call-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.call-row {
+  font-size: 13px;
+  color: #444;
+}
+
+.call-info {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.call-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.call-btn {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.call-btn-primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.call-btn-danger {
+  background-color: #dc2626;
+  color: white;
+}
+
+.call-btn:hover {
+  opacity: 0.9;
+}
