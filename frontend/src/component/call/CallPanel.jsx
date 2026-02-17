@@ -97,7 +97,7 @@ const CallPanel = ({ toUserId }) => {
     if (!token) return;
 
     const ws = new WebSocket(
-      `ws://192.168.1.4:8000/ws/call/?token=${token}`
+      `wss://${window.location.hostname}:8000/ws/call/?token=${token}`
     );
 
     socketRef.current = ws;

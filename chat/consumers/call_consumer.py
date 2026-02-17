@@ -52,7 +52,6 @@ class CallConsumer(AsyncWebsocketConsumer):
 
         print(f"[CALL WS] {self.user.username} connected")
 
-
     async def disconnect(self, close_code):
 
         if self.room_group_name:
@@ -63,7 +62,6 @@ class CallConsumer(AsyncWebsocketConsumer):
 
         if self.user:
             print(f"[CALL WS] {self.user.username} disconnected")
-
 
     async def receive(self, text_data=None, bytes_data=None):
 
@@ -93,7 +91,6 @@ class CallConsumer(AsyncWebsocketConsumer):
         if action not in allowed_actions:
             return
 
-        # to_user is mandatory
         if not to_user_id:
             return
 
@@ -117,41 +114,27 @@ class CallConsumer(AsyncWebsocketConsumer):
             "to_user_id": to_user_id,
         }
 
-        # only attach data for webrtc messages
         if action.startswith("webrtc_"):
             payload["data"] = data.get("data")
 
-        # -------------------------------
-        # send to receiver
-        # -------------------------------
+        # ✅ only send to the other user
         await self.channel_layer.group_send(
             f"user_{to_user_id}",
             payload
         )
 
-        # -------------------------------
-        # send back to caller
-        # -------------------------------
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            payload
-        )
-
         print("[CALL WS] signal:", payload)
-
 
     async def call_signal(self, event):
 
         response = {
             "action": event["action"],
-
             "from_user": event["from_user"],
             "from_user_id": event["from_user_id"],
-
             "to_user_id": event["to_user_id"],
         }
 
         if event.get("data") is not None:
-            response["data"] = event.get("data")
+            response["data"] = event["data"]
 
         await self.send(text_data=json.dumps(response))

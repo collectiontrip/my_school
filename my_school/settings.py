@@ -15,13 +15,16 @@ DEBUG = True
 # ✅ ALLOWED HOSTS - laptop + phone IP
 
 
+
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "192.168.1.3",
     "192.168.1.4",
     "192.168.137.1",
+    "172.24.223.35",
 ]
+
 
 # ----------------------
 INSTALLED_APPS = [
@@ -76,11 +79,11 @@ WSGI_APPLICATION = 'my_school.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'my_school',
-        'USER': 'root',
-        'HOST': 'localhost',
-        'PORT': 3306,
-        'PASSWORD': 'Ravidoc1@1',
+        'NAME': 'my_fresh_project',   
+        'USER': 'ravi',               
+        'PASSWORD': 'Ravidoc1@1',    
+        'HOST': '172.24.223.35',     
+        'PORT': '3306',               
     }
 }
 

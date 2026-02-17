@@ -19,7 +19,7 @@ const PrivateChat = () => {
     if (!token || !myId || !otherUserId) return;
 
     const socket = new WebSocket(
-      `ws://${window.location.hostname}:8000/ws/chat/?token=${token}`
+      `wss://${window.location.hostname}:8000/ws/chat/?token=${token}`
     );
 
     wsRef.current = socket;
