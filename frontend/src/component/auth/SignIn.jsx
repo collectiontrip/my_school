@@ -1,5 +1,6 @@
 import { useState } from "react";
-import AxiosInstance, {loginUser} from "./AxiousInstance";
+import { useNavigate } from "react-router-dom";
+import AxiosInstance, {loginUser} from "./axiosInstance";
 import { getUserId } from "../../services/authService";
 import "./Login.css";
 
@@ -8,6 +9,8 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,6 +35,8 @@ const Login = () => {
 
       console.log("Logged in user id:", userId);
       alert("Login successful");
+      navigate("/home"); 
+
     } catch (err) {
       console.error(err);
       if (err.response && err.response.status === 400) {
