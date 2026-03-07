@@ -3,6 +3,11 @@ import { useParams } from "react-router-dom";
 import "./PrivateChat.css";
 import CallPanel from "../call/CallPanel";
 import AxiosInstance from "../auth/axiosInstance";
+import {
+  getChatSocket,
+  addChatListener,
+  removeChatListener
+} from "../../socket/socketManager";
 
 const PrivateChat = () => {
 
@@ -30,12 +35,10 @@ const PrivateChat = () => {
   // Format Time
   // ------------------------------
   const formatTime = (date) => {
-
     return new Date(date).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit"
     });
-
   };
 
   // ------------------------------
@@ -53,15 +56,12 @@ const PrivateChat = () => {
     if (diffDays === 1) return "Yesterday";
 
     if (diffDays < 7) {
-
       return msgDate.toLocaleDateString("en-US", {
         weekday: "long"
       });
-
     }
 
     return msgDate.toLocaleDateString();
-
   };
 
   // ------------------------------
@@ -92,6 +92,32 @@ const PrivateChat = () => {
       console.error("Message fetch error", err);
 
     }
+
+  };
+
+  // ------------------------------
+  // Handle Incoming WS Messages
+  // ------------------------------
+  const handleChatMessage = (event) => {
+
+    const data = JSON.parse(event.data);
+
+    const isThisChat =
+      (data.from_user_id === myId && data.to_user_id === otherUserId) ||
+      (data.from_user_id === otherUserId && data.to_user_id === myId);
+
+    if (!isThisChat) return;
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: data.id || Date.now(),
+        message: data.message || data.text,
+        self: data.from_user_id === myId,
+        from_user: data.from_user,
+        created_at: data.created_at || new Date().toISOString()
+      }
+    ]);
 
   };
 
@@ -136,63 +162,18 @@ const PrivateChat = () => {
 
     if (!token || !conversationId) return;
 
-    const socket = new WebSocket(
-      `wss://${window.location.hostname}:8000/ws/chat/?token=${token}`
-    );
+    const socket = getChatSocket();
+    if (!socket) return;
 
     wsRef.current = socket;
 
-    socket.onopen = () => {
-
-      console.log("Chat WebSocket connected");
-
-    };
-
-    socket.onmessage = (event) => {
-
-      const data = JSON.parse(event.data);
-
-      const isThisChat =
-        (data.from_user_id === myId && data.to_user_id === otherUserId) ||
-        (data.from_user_id === otherUserId && data.to_user_id === myId);
-
-      if (!isThisChat) return;
-
-      setMessages((prev) => [
-
-        ...prev,
-
-        {
-          id: data.id || Date.now(),
-          message: data.message || data.text,
-          self: data.from_user_id === myId,
-          from_user: data.from_user,
-          created_at: data.created_at || new Date().toISOString()
-        }
-
-      ]);
-
-    };
-
-    socket.onerror = (err) => {
-
-      console.log("WebSocket error", err);
-
-    };
-
-    socket.onclose = () => {
-
-      console.log("Chat WebSocket closed");
-
-    };
+    addChatListener(handleChatMessage);
 
     return () => {
-
-      socket.close();
-
+      removeChatListener(handleChatMessage);
     };
 
-  }, [token, conversationId]);
+  }, [conversationId]);
 
   // ------------------------------
   // Send Message
@@ -202,11 +183,8 @@ const PrivateChat = () => {
     if (!message.trim()) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-
       console.log("WebSocket not connected");
-
       return;
-
     }
 
     const payload = {
@@ -248,16 +226,12 @@ const PrivateChat = () => {
             <div key={m.id}>
 
               {showDate && (
-
                 <div className="chat-date-label">
                   {label}
                 </div>
-
               )}
 
-              <div
-                className={`chat-message-row ${m.self ? "my-msg" : ""}`}
-              >
+              <div className={`chat-message-row ${m.self ? "my-msg" : ""}`}>
 
                 <div className="chat-message-body">
 

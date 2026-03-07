@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import "./CallPanel.css";
-import { getSocket } from "../../socket/socketManager";
+import {
+  getCallSocket,
+  addCallListener,
+  removeCallListener
+} from "../../socket/socketManager";
 
 const CallPanel = ({ toUserId }) => {
 
@@ -14,6 +18,8 @@ const CallPanel = ({ toUserId }) => {
   const [status, setStatus] = useState("disconnected");
   const [callState, setCallState] = useState("idle");
   const [peer, setPeer] = useState(null);
+
+  const myUserId = Number(localStorage.getItem("user_id"));
 
   const send = (payload) => {
     if (!socketRef.current) return;
@@ -43,7 +49,7 @@ const CallPanel = ({ toUserId }) => {
   };
 
   // ----------------------------------------------------
-  // create peer
+  // create peer connection
   // ----------------------------------------------------
   const createPeer = async (targetUserId) => {
 
@@ -87,18 +93,149 @@ const CallPanel = ({ toUserId }) => {
   };
 
   // ----------------------------------------------------
-  // websocket
+  // call event handler (from websocket)
+  // ----------------------------------------------------
+  const callHandler = async (e) => {
+
+    let data;
+
+    try {
+      data = JSON.parse(e.data);
+    } catch (err) {
+      console.error("WS parse error", err);
+      return;
+    }
+
+    if (data.to_user_id && data.to_user_id !== myUserId) {
+      return;
+    }
+
+    console.log("[CALL EVENT]", data);
+
+    // ---------------- incoming call ----------------
+    if (data.action === "call_request") {
+
+      setCallState(prev => {
+
+        if (prev !== "idle") {
+
+          send({
+            action: "call_reject",
+            to_user: data.from_user_id
+          });
+
+          return prev;
+        }
+
+        setPeer({
+          id: data.from_user_id,
+          name: data.from_user
+        });
+
+        return "ringing";
+
+      });
+
+    }
+
+    // ---------------- caller accepted ----------------
+    if (data.action === "call_accept") {
+
+      setCallState("in_call");
+
+      const pc = await createPeer(data.from_user_id);
+
+      const offer = await pc.createOffer();
+
+      await pc.setLocalDescription(offer);
+
+      send({
+        action: "webrtc_offer",
+        to_user: data.from_user_id,
+        data: offer
+      });
+
+    }
+
+    // ---------------- receiver side ----------------
+    if (data.action === "webrtc_offer") {
+
+      setPeer(p => p || {
+        id: data.from_user_id,
+        name: data.from_user
+      });
+
+      const pc = await createPeer(data.from_user_id);
+
+      await pc.setRemoteDescription(
+        new RTCSessionDescription(data.data)
+      );
+
+      const answer = await pc.createAnswer();
+
+      await pc.setLocalDescription(answer);
+
+      send({
+        action: "webrtc_answer",
+        to_user: data.from_user_id,
+        data: answer
+      });
+
+      setCallState("in_call");
+
+    }
+
+    // ---------------- caller side answer ----------------
+    if (data.action === "webrtc_answer") {
+
+      if (!pcRef.current) return;
+
+      await pcRef.current.setRemoteDescription(
+        new RTCSessionDescription(data.data)
+      );
+
+    }
+
+    // ---------------- ICE candidate ----------------
+    if (data.action === "webrtc_ice") {
+
+      if (!pcRef.current || !data.data) return;
+
+      try {
+
+        await pcRef.current.addIceCandidate(
+          new RTCIceCandidate(data.data)
+        );
+
+      } catch (err) {
+
+        console.error("ICE error", err);
+
+      }
+
+    }
+
+    if (data.action === "call_reject") {
+      resetCall();
+    }
+
+    if (data.action === "call_end") {
+      resetCall();
+    }
+
+  };
+
+  // ----------------------------------------------------
+  // websocket setup
   // ----------------------------------------------------
   useEffect(() => {
 
-    const ws = getSocket();
-    const myUserId = Number(localStorage.getItem("user_id"));
+    const ws = getCallSocket();
 
     if (!ws) return;
 
     socketRef.current = ws;
 
-    // socket already open
     if (ws.readyState === WebSocket.OPEN) {
       setStatus("connected");
     }
@@ -117,139 +254,10 @@ const CallPanel = ({ toUserId }) => {
       setStatus("disconnected");
     };
 
-    ws.onmessage = async (e) => {
+    addCallListener(callHandler);
 
-      let data;
-
-      try {
-        data = JSON.parse(e.data);
-      } catch (err) {
-        console.error("WS parse error", err);
-        return;
-      }
-
-      if (data.to_user_id && data.to_user_id !== myUserId) {
-        return;
-      }
-
-      console.log("[CALL EVENT]", data);
-
-      // ---------------- incoming call ----------------
-      if (data.action === "call_request") {
-
-        setCallState(prev => {
-
-          if (prev !== "idle") {
-
-            send({
-              action: "call_reject",
-              to_user: data.from_user_id
-            });
-
-            return prev;
-          }
-
-          setPeer({
-            id: data.from_user_id,
-            name: data.from_user
-          });
-
-          return "ringing";
-
-        });
-
-      }
-
-      // ---------------- caller accepted ----------------
-      if (data.action === "call_accept") {
-
-        setCallState("in_call");
-
-        const pc = await createPeer(data.from_user_id);
-
-        const offer = await pc.createOffer();
-
-        await pc.setLocalDescription(offer);
-
-        send({
-          action: "webrtc_offer",
-          to_user: data.from_user_id,
-          data: offer
-        });
-
-      }
-
-      // ---------------- receiver side ----------------
-      if (data.action === "webrtc_offer") {
-
-        setPeer(p => p || {
-          id: data.from_user_id,
-          name: data.from_user
-        });
-
-        const pc = await createPeer(data.from_user_id);
-
-        await pc.setRemoteDescription(
-          new RTCSessionDescription(data.data)
-        );
-
-        const answer = await pc.createAnswer();
-
-        await pc.setLocalDescription(answer);
-
-        send({
-          action: "webrtc_answer",
-          to_user: data.from_user_id,
-          data: answer
-        });
-
-        setCallState("in_call");
-
-      }
-
-      // ---------------- caller side answer ----------------
-      if (data.action === "webrtc_answer") {
-
-        if (!pcRef.current) return;
-
-        await pcRef.current.setRemoteDescription(
-          new RTCSessionDescription(data.data)
-        );
-
-      }
-
-      // ---------------- ICE ----------------
-      if (data.action === "webrtc_ice") {
-
-        if (!pcRef.current || !data.data) return;
-
-        try {
-
-          await pcRef.current.addIceCandidate(
-            new RTCIceCandidate(data.data)
-          );
-
-        } catch (err) {
-
-          console.error("ICE error", err);
-
-        }
-
-      }
-
-      if (data.action === "call_reject") {
-        resetCall();
-      }
-
-      if (data.action === "call_end") {
-        resetCall();
-      }
-
-    };
-
-    // cleanup
     return () => {
-      socketRef.current = null;
+      removeCallListener(callHandler);
     };
 
   }, []);
@@ -429,6 +437,7 @@ const CallPanel = ({ toUserId }) => {
 
     </div>
   );
+
 };
 
 export default CallPanel;
