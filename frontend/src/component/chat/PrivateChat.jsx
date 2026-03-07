@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import "./PrivateChat.css";
 import CallPanel from "../call/CallPanel";
 import AxiosInstance from "../auth/axiosInstance";
+
 import {
-  getChatSocket,
-  addChatListener,
-  removeChatListener
+  getRealtimeSocket,
+  addRealtimeListener,
+  removeRealtimeListener
 } from "../../socket/socketManager";
 
 const PrivateChat = () => {
@@ -98,9 +99,11 @@ const PrivateChat = () => {
   // ------------------------------
   // Handle Incoming WS Messages
   // ------------------------------
-  const handleChatMessage = (event) => {
+  const handleRealtimeMessage = useCallback((event) => {
 
     const data = JSON.parse(event.data);
+
+    if (data.type !== "chat") return;
 
     const isThisChat =
       (data.from_user_id === myId && data.to_user_id === otherUserId) ||
@@ -111,15 +114,15 @@ const PrivateChat = () => {
     setMessages(prev => [
       ...prev,
       {
-        id: data.id || Date.now(),
-        message: data.message || data.text,
+        id: data.message_id || Date.now(),
+        message: data.message,
         self: data.from_user_id === myId,
         from_user: data.from_user,
         created_at: data.created_at || new Date().toISOString()
       }
     ]);
 
-  };
+  }, [myId, otherUserId]);
 
   // ------------------------------
   // Get / Create Conversation
@@ -162,18 +165,18 @@ const PrivateChat = () => {
 
     if (!token || !conversationId) return;
 
-    const socket = getChatSocket();
+    const socket = getRealtimeSocket();
     if (!socket) return;
 
     wsRef.current = socket;
 
-    addChatListener(handleChatMessage);
+    addRealtimeListener(handleRealtimeMessage);
 
     return () => {
-      removeChatListener(handleChatMessage);
+      removeRealtimeListener(handleRealtimeMessage);
     };
 
-  }, [conversationId]);
+  }, [conversationId, handleRealtimeMessage]);
 
   // ------------------------------
   // Send Message
@@ -188,8 +191,9 @@ const PrivateChat = () => {
     }
 
     const payload = {
-      message,
-      to_user: otherUserId,
+      action: "chat_message",
+      message: message,
+      to_user: otherUserId
     };
 
     wsRef.current.send(JSON.stringify(payload));

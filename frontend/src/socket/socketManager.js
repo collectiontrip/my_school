@@ -1,82 +1,55 @@
-let callSocket = null;
-let chatSocket = null;
+let realtimeSocket = null;
 
-let callListeners = [];
-let chatListeners = [];
+let listeners = new Set();
 
-// ---------------- CALL SOCKET ----------------
 
-export const getCallSocket = () => {
+// ---------------- REALTIME SOCKET ----------------
+
+export const getRealtimeSocket = () => {
 
   if (
-    callSocket &&
+    realtimeSocket &&
     (
-      callSocket.readyState === WebSocket.OPEN ||
-      callSocket.readyState === WebSocket.CONNECTING
+      realtimeSocket.readyState === WebSocket.OPEN ||
+      realtimeSocket.readyState === WebSocket.CONNECTING
     )
   ) {
-    console.log("Using existing CALL WebSocket");
-    return callSocket;
+    console.log("Using existing REALTIME WebSocket");
+    return realtimeSocket;
   }
 
   const token = localStorage.getItem("accessToken");
   if (!token) return null;
 
-  const wsUrl = `wss://${window.location.hostname}:8000/ws/call/?token=${token}`;
-  console.log("Creating CALL WebSocket:", wsUrl);
+  const wsUrl = `wss://${window.location.hostname}:8000/ws/realtime/?token=${token}`;
+  console.log("Creating REALTIME WebSocket:", wsUrl);
 
-  callSocket = new WebSocket(wsUrl);
+  realtimeSocket = new WebSocket(wsUrl);
 
-  callSocket.onmessage = (event) => {
-    callListeners.forEach(cb => cb(event));
+  realtimeSocket.onmessage = (event) => {
+
+    listeners.forEach((cb) => cb(event));
+
   };
 
-  return callSocket;
-};
-
-export const addCallListener = (cb) => {
-  callListeners.push(cb);
-};
-
-export const removeCallListener = (cb) => {
-  callListeners = callListeners.filter(fn => fn !== cb);
-};
-
-
-// ---------------- CHAT SOCKET ----------------
-
-export const getChatSocket = () => {
-
-  if (
-    chatSocket &&
-    (
-      chatSocket.readyState === WebSocket.OPEN ||
-      chatSocket.readyState === WebSocket.CONNECTING
-    )
-  ) {
-    console.log("Using existing CHAT WebSocket");
-    return chatSocket;
-  }
-
-  const token = localStorage.getItem("accessToken");
-  if (!token) return null;
-
-  const wsUrl = `wss://${window.location.hostname}:8000/ws/chat/?token=${token}`;
-  console.log("Creating CHAT WebSocket:", wsUrl);
-
-  chatSocket = new WebSocket(wsUrl);
-
-  chatSocket.onmessage = (event) => {
-    chatListeners.forEach(cb => cb(event));
+  realtimeSocket.onopen = () => {
+    console.log("Realtime WebSocket connected");
   };
 
-  return chatSocket;
+  realtimeSocket.onclose = () => {
+    console.log("Realtime WebSocket disconnected");
+  };
+
+  return realtimeSocket;
 };
 
-export const addChatListener = (cb) => {
-  chatListeners.push(cb);
+
+// ---------------- LISTENERS ----------------
+
+export const addRealtimeListener = (cb) => {
+  listeners.add(cb);
 };
 
-export const removeChatListener = (cb) => {
-  chatListeners = chatListeners.filter(fn => fn !== cb);
+export const removeRealtimeListener = (cb) => {
+  listeners.delete(cb);
 };

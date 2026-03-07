@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import "./CallPanel.css";
+
 import {
-  getCallSocket,
-  addCallListener,
-  removeCallListener
+  getRealtimeSocket,
+  addRealtimeListener,
+  removeRealtimeListener
 } from "../../socket/socketManager";
 
 const CallPanel = ({ toUserId }) => {
@@ -21,10 +22,20 @@ const CallPanel = ({ toUserId }) => {
 
   const myUserId = Number(localStorage.getItem("user_id"));
 
+  // ----------------------------------------------------
+  // safe send
+  // ----------------------------------------------------
   const send = (payload) => {
+
     if (!socketRef.current) return;
-    if (socketRef.current.readyState !== WebSocket.OPEN) return;
+
+    if (socketRef.current.readyState !== WebSocket.OPEN) {
+      console.log("socket not ready");
+      return;
+    }
+
     socketRef.current.send(JSON.stringify(payload));
+
   };
 
   // ----------------------------------------------------
@@ -46,6 +57,7 @@ const CallPanel = ({ toUserId }) => {
     }
 
     return stream;
+
   };
 
   // ----------------------------------------------------
@@ -56,9 +68,7 @@ const CallPanel = ({ toUserId }) => {
     if (pcRef.current) return pcRef.current;
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" }
-      ]
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
 
     pcRef.current = pc;
@@ -70,49 +80,83 @@ const CallPanel = ({ toUserId }) => {
     });
 
     pc.ontrack = (event) => {
+
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
+
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        send({
-          action: "webrtc_ice",
-          to_user: targetUserId,
-          data: event.candidate
-        });
-      }
-    };
 
-    pc.oniceconnectionstatechange = () => {
-      console.log("ICE state:", pc.iceConnectionState);
+      if (!event.candidate) return;
+
+      send({
+        action: "webrtc_ice",
+        to_user: targetUserId,
+        data: event.candidate
+      });
+
     };
 
     return pc;
+
   };
 
   // ----------------------------------------------------
-  // call event handler (from websocket)
+  // reset call
   // ----------------------------------------------------
-  const callHandler = async (e) => {
+  const resetCall = () => {
+
+    if (pcRef.current) {
+
+      pcRef.current.ontrack = null;
+      pcRef.current.onicecandidate = null;
+      pcRef.current.close();
+      pcRef.current = null;
+
+    }
+
+    if (localStreamRef.current) {
+
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+
+    }
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    setCallState("idle");
+    setPeer(null);
+
+  };
+
+  // ----------------------------------------------------
+  // REALTIME EVENT HANDLER
+  // ----------------------------------------------------
+  const callHandler = useCallback(async (e) => {
 
     let data;
 
     try {
       data = JSON.parse(e.data);
-    } catch (err) {
-      console.error("WS parse error", err);
+    } catch {
       return;
     }
 
-    if (data.to_user_id && data.to_user_id !== myUserId) {
-      return;
-    }
+    if (data.type !== "call") return;
+
+    if (data.to_user_id && data.to_user_id !== myUserId) return;
 
     console.log("[CALL EVENT]", data);
 
-    // ---------------- incoming call ----------------
+    // incoming call
     if (data.action === "call_request") {
 
       setCallState(prev => {
@@ -125,6 +169,7 @@ const CallPanel = ({ toUserId }) => {
           });
 
           return prev;
+
         }
 
         setPeer({
@@ -138,7 +183,7 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // ---------------- caller accepted ----------------
+    // caller accepted
     if (data.action === "call_accept") {
 
       setCallState("in_call");
@@ -157,7 +202,7 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // ---------------- receiver side ----------------
+    // receiver side offer
     if (data.action === "webrtc_offer") {
 
       setPeer(p => p || {
@@ -185,7 +230,7 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // ---------------- caller side answer ----------------
+    // caller side answer
     if (data.action === "webrtc_answer") {
 
       if (!pcRef.current) return;
@@ -196,10 +241,10 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // ---------------- ICE candidate ----------------
+    // ICE candidate
     if (data.action === "webrtc_ice") {
 
-      if (!pcRef.current || !data.data) return;
+      if (!pcRef.current) return;
 
       try {
 
@@ -215,22 +260,17 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    if (data.action === "call_reject") {
-      resetCall();
-    }
+    if (data.action === "call_reject") resetCall();
+    if (data.action === "call_end") resetCall();
 
-    if (data.action === "call_end") {
-      resetCall();
-    }
-
-  };
+  }, [myUserId]);
 
   // ----------------------------------------------------
   // websocket setup
   // ----------------------------------------------------
   useEffect(() => {
 
-    const ws = getCallSocket();
+    const ws = getRealtimeSocket();
 
     if (!ws) return;
 
@@ -242,58 +282,29 @@ const CallPanel = ({ toUserId }) => {
 
     ws.onopen = () => {
       setStatus("connected");
-      console.log("[CALL] socket connected");
-    };
-
-    ws.onerror = (err) => {
-      console.error("[CALL] socket error", err);
+      console.log("[Realtime] socket connected");
     };
 
     ws.onclose = () => {
-      console.log("[CALL] socket closed");
+      console.log("[Realtime] socket closed");
       setStatus("disconnected");
     };
 
-    addCallListener(callHandler);
-
-    return () => {
-      removeCallListener(callHandler);
+    ws.onerror = (err) => {
+      console.error("[Realtime] socket error", err);
     };
 
-  }, []);
+    addRealtimeListener(callHandler);
+
+    return () => {
+      removeRealtimeListener(callHandler);
+    };
+
+  }, [callHandler]);
 
   // ----------------------------------------------------
-  // helpers
+  // UI actions
   // ----------------------------------------------------
-  const resetCall = () => {
-
-    if (pcRef.current) {
-
-      pcRef.current.ontrack = null;
-      pcRef.current.onicecandidate = null;
-      pcRef.current.close();
-      pcRef.current = null;
-
-    }
-
-    if (localStreamRef.current) {
-
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-      localStreamRef.current = null;
-
-    }
-
-    if (localVideoRef.current)
-      localVideoRef.current.srcObject = null;
-
-    if (remoteVideoRef.current)
-      remoteVideoRef.current.srcObject = null;
-
-    setCallState("idle");
-    setPeer(null);
-
-  };
-
   const startCall = () => {
 
     if (!toUserId) return;
