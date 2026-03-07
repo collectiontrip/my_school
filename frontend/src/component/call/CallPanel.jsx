@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./CallPanel.css";
+import { getSocket } from "../../socket/socketManager";
 
 const CallPanel = ({ toUserId }) => {
 
@@ -11,7 +12,7 @@ const CallPanel = ({ toUserId }) => {
   const remoteVideoRef = useRef(null);
 
   const [status, setStatus] = useState("disconnected");
-  const [callState, setCallState] = useState("idle"); // idle | calling | ringing | in_call
+  const [callState, setCallState] = useState("idle");
   const [peer, setPeer] = useState(null);
 
   const send = (payload) => {
@@ -24,6 +25,7 @@ const CallPanel = ({ toUserId }) => {
   // get / reuse local media
   // ----------------------------------------------------
   const getLocalStream = async () => {
+
     if (localStreamRef.current) return localStreamRef.current;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -41,7 +43,7 @@ const CallPanel = ({ toUserId }) => {
   };
 
   // ----------------------------------------------------
-  // create peer only once
+  // create peer
   // ----------------------------------------------------
   const createPeer = async (targetUserId) => {
 
@@ -62,8 +64,6 @@ const CallPanel = ({ toUserId }) => {
     });
 
     pc.ontrack = (event) => {
-      console.log("Remote track received");
-
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
@@ -91,27 +91,43 @@ const CallPanel = ({ toUserId }) => {
   // ----------------------------------------------------
   useEffect(() => {
 
-    const token = localStorage.getItem("accessToken");
+    const ws = getSocket();
     const myUserId = Number(localStorage.getItem("user_id"));
 
-    if (!token) return;
-
-    const ws = new WebSocket(
-      `wss://${window.location.hostname}:8000/ws/call/?token=${token}`
-    );
+    if (!ws) return;
 
     socketRef.current = ws;
+
+    // socket already open
+    if (ws.readyState === WebSocket.OPEN) {
+      setStatus("connected");
+    }
 
     ws.onopen = () => {
       setStatus("connected");
       console.log("[CALL] socket connected");
     };
 
+    ws.onerror = (err) => {
+      console.error("[CALL] socket error", err);
+    };
+
+    ws.onclose = () => {
+      console.log("[CALL] socket closed");
+      setStatus("disconnected");
+    };
+
     ws.onmessage = async (e) => {
 
-      const data = JSON.parse(e.data);
+      let data;
 
-      // ✅ very important filter
+      try {
+        data = JSON.parse(e.data);
+      } catch (err) {
+        console.error("WS parse error", err);
+        return;
+      }
+
       if (data.to_user_id && data.to_user_id !== myUserId) {
         return;
       }
@@ -124,10 +140,12 @@ const CallPanel = ({ toUserId }) => {
         setCallState(prev => {
 
           if (prev !== "idle") {
+
             send({
               action: "call_reject",
               to_user: data.from_user_id
             });
+
             return prev;
           }
 
@@ -137,10 +155,12 @@ const CallPanel = ({ toUserId }) => {
           });
 
           return "ringing";
+
         });
+
       }
 
-      // ---------------- caller side ----------------
+      // ---------------- caller accepted ----------------
       if (data.action === "call_accept") {
 
         setCallState("in_call");
@@ -148,6 +168,7 @@ const CallPanel = ({ toUserId }) => {
         const pc = await createPeer(data.from_user_id);
 
         const offer = await pc.createOffer();
+
         await pc.setLocalDescription(offer);
 
         send({
@@ -155,6 +176,7 @@ const CallPanel = ({ toUserId }) => {
           to_user: data.from_user_id,
           data: offer
         });
+
       }
 
       // ---------------- receiver side ----------------
@@ -172,6 +194,7 @@ const CallPanel = ({ toUserId }) => {
         );
 
         const answer = await pc.createAnswer();
+
         await pc.setLocalDescription(answer);
 
         send({
@@ -181,9 +204,10 @@ const CallPanel = ({ toUserId }) => {
         });
 
         setCallState("in_call");
+
       }
 
-      // ---------------- caller side ----------------
+      // ---------------- caller side answer ----------------
       if (data.action === "webrtc_answer") {
 
         if (!pcRef.current) return;
@@ -191,20 +215,26 @@ const CallPanel = ({ toUserId }) => {
         await pcRef.current.setRemoteDescription(
           new RTCSessionDescription(data.data)
         );
+
       }
 
-      // ---------------- both sides ----------------
+      // ---------------- ICE ----------------
       if (data.action === "webrtc_ice") {
 
         if (!pcRef.current || !data.data) return;
 
         try {
+
           await pcRef.current.addIceCandidate(
             new RTCIceCandidate(data.data)
           );
+
         } catch (err) {
+
           console.error("ICE error", err);
+
         }
+
       }
 
       if (data.action === "call_reject") {
@@ -214,15 +244,12 @@ const CallPanel = ({ toUserId }) => {
       if (data.action === "call_end") {
         resetCall();
       }
+
     };
 
-    ws.onclose = () => {
-      console.log("[CALL] socket closed");
-      setStatus("disconnected");
-    };
-
+    // cleanup
     return () => {
-      ws.close();
+      socketRef.current = null;
     };
 
   }, []);
@@ -233,15 +260,19 @@ const CallPanel = ({ toUserId }) => {
   const resetCall = () => {
 
     if (pcRef.current) {
+
       pcRef.current.ontrack = null;
       pcRef.current.onicecandidate = null;
       pcRef.current.close();
       pcRef.current = null;
+
     }
 
     if (localStreamRef.current) {
+
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
+
     }
 
     if (localVideoRef.current)
@@ -252,6 +283,7 @@ const CallPanel = ({ toUserId }) => {
 
     setCallState("idle");
     setPeer(null);
+
   };
 
   const startCall = () => {
@@ -269,6 +301,7 @@ const CallPanel = ({ toUserId }) => {
       action: "call_request",
       to_user: toUserId
     });
+
   };
 
   const cutCalling = () => {
@@ -281,6 +314,7 @@ const CallPanel = ({ toUserId }) => {
     });
 
     resetCall();
+
   };
 
   const pickCall = () => {
@@ -291,6 +325,7 @@ const CallPanel = ({ toUserId }) => {
       action: "call_accept",
       to_user: peer.id
     });
+
   };
 
   const rejectCall = () => {
@@ -303,6 +338,7 @@ const CallPanel = ({ toUserId }) => {
     });
 
     resetCall();
+
   };
 
   const cutInCall = () => {
@@ -315,11 +351,9 @@ const CallPanel = ({ toUserId }) => {
     });
 
     resetCall();
+
   };
 
-  // ----------------------------------------------------
-  // UI
-  // ----------------------------------------------------
   return (
     <div className="call-panel">
 
@@ -342,10 +376,7 @@ const CallPanel = ({ toUserId }) => {
         </div>
 
         {callState === "idle" && toUserId && (
-          <button
-            className="call-btn call-btn-primary"
-            onClick={startCall}
-          >
+          <button className="call-btn call-btn-primary" onClick={startCall}>
             Call
           </button>
         )}
@@ -356,10 +387,7 @@ const CallPanel = ({ toUserId }) => {
               Calling {peer?.name} ...
             </div>
 
-            <button
-              className="call-btn call-btn-danger"
-              onClick={cutCalling}
-            >
+            <button className="call-btn call-btn-danger" onClick={cutCalling}>
               Cut
             </button>
           </>
@@ -372,19 +400,15 @@ const CallPanel = ({ toUserId }) => {
             </div>
 
             <div className="call-actions">
-              <button
-                className="call-btn call-btn-primary"
-                onClick={pickCall}
-              >
+
+              <button className="call-btn call-btn-primary" onClick={pickCall}>
                 Pick
               </button>
 
-              <button
-                className="call-btn call-btn-danger"
-                onClick={rejectCall}
-              >
+              <button className="call-btn call-btn-danger" onClick={rejectCall}>
                 Cut
               </button>
+
             </div>
           </>
         )}
@@ -395,10 +419,7 @@ const CallPanel = ({ toUserId }) => {
               In call with {peer?.name}
             </div>
 
-            <button
-              className="call-btn call-btn-danger"
-              onClick={cutInCall}
-            >
+            <button className="call-btn call-btn-danger" onClick={cutInCall}>
               End Call
             </button>
           </>
