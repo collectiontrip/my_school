@@ -2,9 +2,6 @@ let realtimeSocket = null;
 
 let listeners = new Set();
 
-
-// ---------------- REALTIME SOCKET ----------------
-
 export const getRealtimeSocket = () => {
 
   if (
@@ -22,13 +19,23 @@ export const getRealtimeSocket = () => {
   if (!token) return null;
 
   const wsUrl = `wss://${window.location.hostname}:8000/ws/realtime/?token=${token}`;
+
   console.log("Creating REALTIME WebSocket:", wsUrl);
 
   realtimeSocket = new WebSocket(wsUrl);
 
   realtimeSocket.onmessage = (event) => {
 
-    listeners.forEach((cb) => cb(event));
+    let data;
+
+    try {
+      data = JSON.parse(event.data);
+    } catch (err) {
+      console.error("Invalid WS message", event.data);
+      return;
+    }
+
+    listeners.forEach((cb) => cb(data));
 
   };
 
@@ -40,9 +47,13 @@ export const getRealtimeSocket = () => {
     console.log("Realtime WebSocket disconnected");
   };
 
-  return realtimeSocket;
-};
+  realtimeSocket.onerror = (err) => {
+    console.error("Realtime socket error", err);
+  };
 
+  return realtimeSocket;
+
+};
 
 // ---------------- LISTENERS ----------------
 

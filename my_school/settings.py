@@ -116,10 +116,20 @@ REST_FRAMEWORK = {
 }
 
 DJOSER = {
-    'SERIALIZERS': {
-        'user_create': 'core.serializers.UserCreateSerializer',
-        'current_user': 'core.serializers.UserSerializer',
-    }
+    "SERIALIZERS": {
+        "user_create": "core.serializers.UserCreateSerializer",
+        "user": "core.serializers.UserSerializer",
+        "current_user": "core.serializers.UserSerializer",
+    },
+
+    "PERMISSIONS": {
+        "user_list": ["rest_framework.permissions.IsAuthenticated"],
+        "user": ["rest_framework.permissions.IsAuthenticated"],
+        "current_user": ["rest_framework.permissions.IsAuthenticated"],
+    },
+
+    # important
+    "HIDE_USERS": False,
 }
 
 SIMPLE_JWT = {

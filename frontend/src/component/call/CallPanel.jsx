@@ -124,13 +124,8 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
 
     setCallState("idle");
     setPeer(null);
@@ -140,15 +135,7 @@ const CallPanel = ({ toUserId }) => {
   // ----------------------------------------------------
   // REALTIME EVENT HANDLER
   // ----------------------------------------------------
-  const callHandler = useCallback(async (e) => {
-
-    let data;
-
-    try {
-      data = JSON.parse(e.data);
-    } catch {
-      return;
-    }
+  const callHandler = useCallback(async (data) => {
 
     if (data.type !== "call") return;
 
@@ -374,6 +361,7 @@ const CallPanel = ({ toUserId }) => {
   };
 
   return (
+
     <div className="call-panel">
 
       <div className="call-header">
@@ -447,6 +435,7 @@ const CallPanel = ({ toUserId }) => {
       </div>
 
     </div>
+
   );
 
 };
