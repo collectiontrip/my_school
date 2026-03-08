@@ -49,7 +49,6 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        # set user online
         await database_sync_to_async(User.objects.filter(id=self.user.id).update)(
             is_online=True
         )
@@ -100,7 +99,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             print(f"[Realtime WS] {self.user.username} disconnected")
 
     # ---------------------------------------------------
-    # PRESENCE BROADCAST
+    # PRESENCE
     # ---------------------------------------------------
 
     async def broadcast_presence(self, user_id, is_online):
@@ -113,24 +112,12 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    # ---------------------------------------------------
-    # PRESENCE EVENT
-    # ---------------------------------------------------
-
     async def user_presence(self, event):
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
 
         last_seen = None
 
         if not event["is_online"]:
-            try:
-                user = await database_sync_to_async(User.objects.get)(
-                    id=event["user_id"]
-                )
-                last_seen = user.last_seen.isoformat() if user.last_seen else None
-            except User.DoesNotExist:
-                pass
+            last_seen = await self.get_last_seen(event["user_id"])
 
         await self.send(text_data=json.dumps({
             "type": "presence",
@@ -140,7 +127,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         }))
 
     # ---------------------------------------------------
-    # RECEIVE MESSAGE
+    # RECEIVE
     # ---------------------------------------------------
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -150,7 +137,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
         try:
             data = json.loads(text_data)
-        except Exception:
+        except:
             return
 
         action = data.get("action")
@@ -159,32 +146,55 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         if not to_user:
             return
 
-        try:
-            to_user = int(to_user)
-        except Exception:
-            return
+        to_user = int(to_user)
 
         if to_user == self.user.id:
             return
 
         # ------------------------------------------------
-        # TYPING INDICATOR
+        # TYPING
         # ------------------------------------------------
 
         if action == "typing":
 
+            await self.channel_layer.group_send(
+                f"user_{to_user}",
+                {
+                    "type": "typing_event",
+                    "from_user": self.user.username,
+                    "from_user_id": self.user.id,
+                    "to_user_id": to_user,
+                    "is_typing": data.get("is_typing", False),
+                }
+            )
+            return
+
+        # ------------------------------------------------
+        # MESSAGE SEEN
+        # ------------------------------------------------
+
+        if action == "seen":
+
+            msg_id = data.get("message_id")
+
+            await self.mark_seen(msg_id)
+
             payload = {
-                "type": "typing_event",
-                "from_user": self.user.username,
-                "from_user_id": self.user.id,
-                "to_user_id": to_user,
-                "is_typing": data.get("is_typing", False),
+                "type": "message_seen",
+                "message_id": msg_id,
+                "seen_by": self.user.id
             }
 
             await self.channel_layer.group_send(
                 f"user_{to_user}",
                 payload
             )
+
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                payload
+            )
+
             return
 
         # ------------------------------------------------
@@ -208,6 +218,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 "to_user_id": to_user,
                 "message_id": str(msg.id),
                 "created_at": msg.created_at.isoformat(),
+                "is_delivered": True
             }
 
             await self.channel_layer.group_send(f"user_{to_user}", payload)
@@ -216,7 +227,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             return
 
         # ------------------------------------------------
-        # CALL / WEBRTC SIGNAL
+        # CALL / WEBRTC
         # ------------------------------------------------
 
         allowed_call_actions = (
@@ -237,20 +248,16 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 "from_user": self.user.username,
                 "from_user_id": self.user.id,
                 "to_user_id": to_user,
+                "data": data.get("data")
             }
-
-            if action.startswith("webrtc_"):
-                payload["data"] = data.get("data")
 
             await self.channel_layer.group_send(
                 f"user_{to_user}",
                 payload
             )
 
-            print("[Realtime WS] call signal:", payload)
-
     # ---------------------------------------------------
-    # CHAT EVENT
+    # EVENTS
     # ---------------------------------------------------
 
     async def chat_event(self, event):
@@ -263,30 +270,19 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             "to_user_id": event["to_user_id"],
             "message_id": event["message_id"],
             "created_at": event["created_at"],
+            "is_delivered": event.get("is_delivered", False)
         }))
-
-    # ---------------------------------------------------
-    # CALL EVENT
-    # ---------------------------------------------------
 
     async def call_event(self, event):
 
-        response = {
+        await self.send(text_data=json.dumps({
             "type": "call",
             "action": event["action"],
             "from_user": event["from_user"],
             "from_user_id": event["from_user_id"],
             "to_user_id": event["to_user_id"],
-        }
-
-        if event.get("data") is not None:
-            response["data"] = event["data"]
-
-        await self.send(text_data=json.dumps(response))
-
-    # ---------------------------------------------------
-    # TYPING EVENT
-    # ---------------------------------------------------
+            "data": event.get("data")
+        }))
 
     async def typing_event(self, event):
 
@@ -298,8 +294,16 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             "is_typing": event["is_typing"],
         }))
 
+    async def message_seen(self, event):
+
+        await self.send(text_data=json.dumps({
+            "type": "seen",
+            "message_id": event["message_id"],
+            "seen_by": event["seen_by"]
+        }))
+
     # ---------------------------------------------------
-    # DATABASE FUNCTION
+    # DATABASE
     # ---------------------------------------------------
 
     @database_sync_to_async
@@ -324,7 +328,33 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             conversation=conversation,
             sender=self.user,
             text=message,
-            message_type="text"
+            message_type="text",
+            is_delivered=True
         )
 
         return msg
+
+    @database_sync_to_async
+    def mark_seen(self, msg_id):
+
+        try:
+            msg = Message.objects.get(id=msg_id)
+            msg.is_seen = True
+            msg.save()
+        except Message.DoesNotExist:
+            pass
+
+    @database_sync_to_async
+    def get_last_seen(self, user_id):
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        try:
+            user = User.objects.get(id=user_id)
+            if user.last_seen:
+                return user.last_seen.isoformat()
+        except User.DoesNotExist:
+            pass
+
+        return None

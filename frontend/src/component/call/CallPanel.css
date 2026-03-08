@@ -1,79 +1,200 @@
-.call-panel {
-  width: 100%;
-  max-width: 320px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 12px;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  font-family: sans-serif;
+/* =========================
+   CALL PANEL CONTAINER
+========================= */
+
+.call-panel{
+  width:100%;
+  max-width:720px;
+  margin:auto;
+  border-radius:14px;
+  overflow:hidden;
+
+  background:rgba(0,0,0,0.65);
+  backdrop-filter:blur(8px);
+
+  box-shadow:0 10px 40px rgba(0,0,0,0.5);
+
+  display:flex;
+  flex-direction:column;
+  color:white;
 }
 
-.call-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  font-weight: 600;
+/* =========================
+   HEADER
+========================= */
+
+.call-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+
+  padding:12px 16px;
+  font-size:14px;
+  font-weight:600;
+
+  border-bottom:1px solid rgba(255,255,255,0.08);
 }
 
-.call-status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: #eee;
+/* connection status */
+
+.call-status{
+  font-size:12px;
+  padding:3px 8px;
+  border-radius:6px;
 }
 
-.call-status.connected {
-  background: #d4f5dd;
-  color: #1c7c3a;
+.call-status.connected{
+  background:#00c853;
+  color:#000;
 }
 
-.call-status.disconnected {
-  background: #f5d4d4;
-  color: #8a1f1f;
+.call-status.disconnected{
+  background:#e53935;
 }
 
-.call-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* =========================
+   VIDEO AREA
+========================= */
+
+.call-video-wrap{
+  position:relative;
+  width:100%;
+  height:360px;
+  background:black;
+  overflow:hidden;
 }
 
-.call-row {
-  font-size: 13px;
-  color: #444;
+/* remote full video */
+
+.remote-video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
 }
 
-.call-info {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
+/* self preview */
+
+.local-video{
+  position:absolute;
+  bottom:14px;
+  right:14px;
+
+  width:140px;
+  height:100px;
+
+  border-radius:10px;
+  border:2px solid white;
+
+  object-fit:cover;
+
+  box-shadow:0 6px 18px rgba(0,0,0,0.6);
 }
 
-.call-actions {
-  display: flex;
-  gap: 10px;
+/* swap button */
+
+.video-toggle{
+  position:absolute;
+  top:12px;
+  right:12px;
+
+  background:rgba(0,0,0,0.65);
+  border:none;
+
+  color:white;
+  font-size:13px;
+
+  padding:6px 12px;
+  border-radius:8px;
+
+  cursor:pointer;
+  transition:0.2s;
 }
 
-.call-btn {
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
+.video-toggle:hover{
+  background:rgba(0,0,0,0.9);
 }
 
-.call-btn-primary {
-  background-color: #2563eb;
-  color: white;
+/* =========================
+   CALL BODY
+========================= */
+
+.call-body{
+  padding:16px;
+
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:12px;
 }
 
-.call-btn-danger {
-  background-color: #dc2626;
-  color: white;
+/* call info */
+
+.call-info{
+  font-size:14px;
+  color:#ccc;
 }
 
-.call-btn:hover {
-  opacity: 0.9;
+/* =========================
+   BUTTONS
+========================= */
+
+.call-actions{
+  display:flex;
+  gap:12px;
+}
+
+.call-btn{
+  border:none;
+  border-radius:10px;
+  padding:10px 18px;
+
+  font-size:14px;
+  font-weight:600;
+
+  cursor:pointer;
+  transition:0.2s;
+}
+
+/* start / accept */
+
+.call-btn-primary{
+  background:#00c853;
+  color:#000;
+}
+
+.call-btn-primary:hover{
+  background:#00e676;
+}
+
+/* end / reject */
+
+.call-btn-danger{
+  background:#e53935;
+  color:white;
+}
+
+.call-btn-danger:hover{
+  background:#ff5252;
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width:700px){
+
+.call-panel{
+  border-radius:0;
+  height:100vh;
+}
+
+.call-video-wrap{
+  height:50vh;
+}
+
+.local-video{
+  width:110px;
+  height:80px;
+}
+
 }

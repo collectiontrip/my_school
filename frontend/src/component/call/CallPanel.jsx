@@ -20,6 +20,8 @@ const CallPanel = ({ toUserId }) => {
   const [callState, setCallState] = useState("idle");
   const [peer, setPeer] = useState(null);
 
+  const [swapVideo, setSwapVideo] = useState(false);
+
   const myUserId = Number(localStorage.getItem("user_id"));
 
   // ----------------------------------------------------
@@ -29,10 +31,7 @@ const CallPanel = ({ toUserId }) => {
 
     if (!socketRef.current) return;
 
-    if (socketRef.current.readyState !== WebSocket.OPEN) {
-      console.log("socket not ready");
-      return;
-    }
+    if (socketRef.current.readyState !== WebSocket.OPEN) return;
 
     socketRef.current.send(JSON.stringify(payload));
 
@@ -109,19 +108,13 @@ const CallPanel = ({ toUserId }) => {
   const resetCall = () => {
 
     if (pcRef.current) {
-
-      pcRef.current.ontrack = null;
-      pcRef.current.onicecandidate = null;
       pcRef.current.close();
       pcRef.current = null;
-
     }
 
     if (localStreamRef.current) {
-
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
-
     }
 
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
@@ -133,7 +126,7 @@ const CallPanel = ({ toUserId }) => {
   };
 
   // ----------------------------------------------------
-  // REALTIME EVENT HANDLER
+  // realtime events
   // ----------------------------------------------------
   const callHandler = useCallback(async (data) => {
 
@@ -141,36 +134,17 @@ const CallPanel = ({ toUserId }) => {
 
     if (data.to_user_id && data.to_user_id !== myUserId) return;
 
-    console.log("[CALL EVENT]", data);
-
-    // incoming call
     if (data.action === "call_request") {
 
-      setCallState(prev => {
-
-        if (prev !== "idle") {
-
-          send({
-            action: "call_reject",
-            to_user: data.from_user_id
-          });
-
-          return prev;
-
-        }
-
-        setPeer({
-          id: data.from_user_id,
-          name: data.from_user
-        });
-
-        return "ringing";
-
+      setPeer({
+        id: data.from_user_id,
+        name: data.from_user
       });
+
+      setCallState("ringing");
 
     }
 
-    // caller accepted
     if (data.action === "call_accept") {
 
       setCallState("in_call");
@@ -189,13 +163,7 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // receiver side offer
     if (data.action === "webrtc_offer") {
-
-      setPeer(p => p || {
-        id: data.from_user_id,
-        name: data.from_user
-      });
 
       const pc = await createPeer(data.from_user_id);
 
@@ -217,7 +185,6 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // caller side answer
     if (data.action === "webrtc_answer") {
 
       if (!pcRef.current) return;
@@ -228,22 +195,13 @@ const CallPanel = ({ toUserId }) => {
 
     }
 
-    // ICE candidate
     if (data.action === "webrtc_ice") {
 
       if (!pcRef.current) return;
 
-      try {
-
-        await pcRef.current.addIceCandidate(
-          new RTCIceCandidate(data.data)
-        );
-
-      } catch (err) {
-
-        console.error("ICE error", err);
-
-      }
+      await pcRef.current.addIceCandidate(
+        new RTCIceCandidate(data.data)
+      );
 
     }
 
@@ -252,9 +210,6 @@ const CallPanel = ({ toUserId }) => {
 
   }, [myUserId]);
 
-  // ----------------------------------------------------
-  // websocket setup
-  // ----------------------------------------------------
   useEffect(() => {
 
     const ws = getRealtimeSocket();
@@ -263,35 +218,19 @@ const CallPanel = ({ toUserId }) => {
 
     socketRef.current = ws;
 
-    if (ws.readyState === WebSocket.OPEN) {
-      setStatus("connected");
-    }
-
-    ws.onopen = () => {
-      setStatus("connected");
-      console.log("[Realtime] socket connected");
-    };
-
-    ws.onclose = () => {
-      console.log("[Realtime] socket closed");
-      setStatus("disconnected");
-    };
-
-    ws.onerror = (err) => {
-      console.error("[Realtime] socket error", err);
-    };
+    ws.onopen = () => setStatus("connected");
+    ws.onclose = () => setStatus("disconnected");
 
     addRealtimeListener(callHandler);
 
-    return () => {
-      removeRealtimeListener(callHandler);
-    };
+    return () => removeRealtimeListener(callHandler);
 
   }, [callHandler]);
 
   // ----------------------------------------------------
   // UI actions
   // ----------------------------------------------------
+
   const startCall = () => {
 
     if (!toUserId) return;
@@ -310,7 +249,7 @@ const CallPanel = ({ toUserId }) => {
 
   };
 
-  const cutCalling = () => {
+  const endCall = () => {
 
     if (!peer) return;
 
@@ -325,8 +264,6 @@ const CallPanel = ({ toUserId }) => {
 
   const pickCall = () => {
 
-    if (!peer) return;
-
     send({
       action: "call_accept",
       to_user: peer.id
@@ -336,23 +273,8 @@ const CallPanel = ({ toUserId }) => {
 
   const rejectCall = () => {
 
-    if (!peer) return;
-
     send({
       action: "call_reject",
-      to_user: peer.id
-    });
-
-    resetCall();
-
-  };
-
-  const cutInCall = () => {
-
-    if (!peer) return;
-
-    send({
-      action: "call_end",
       to_user: peer.id
     });
 
@@ -365,37 +287,54 @@ const CallPanel = ({ toUserId }) => {
     <div className="call-panel">
 
       <div className="call-header">
-        <span>Call Panel</span>
+        <span>Video Call</span>
         <span className={`call-status ${status}`}>
           {status}
         </span>
       </div>
 
+      <div className="call-video-wrap">
+
+        <video
+          ref={remoteVideoRef}
+          className={swapVideo ? "local-video" : "remote-video"}
+          autoPlay
+          playsInline
+        />
+
+        <video
+          ref={localVideoRef}
+          className={swapVideo ? "remote-video" : "local-video"}
+          autoPlay
+          muted
+          playsInline
+        />
+
+        <button
+          className="video-toggle"
+          onClick={() => setSwapVideo(prev => !prev)}
+        >
+          Swap
+        </button>
+
+      </div>
+
       <div className="call-body">
-
-        <div className="call-row">
-          <strong>State :</strong> {callState}
-        </div>
-
-        <div className="call-video-wrap">
-          <video ref={localVideoRef} autoPlay muted playsInline />
-          <video ref={remoteVideoRef} autoPlay playsInline />
-        </div>
 
         {callState === "idle" && toUserId && (
           <button className="call-btn call-btn-primary" onClick={startCall}>
-            Call
+            Start Call
           </button>
         )}
 
         {callState === "calling" && (
           <>
             <div className="call-info">
-              Calling {peer?.name} ...
+              Calling {peer?.name}...
             </div>
 
-            <button className="call-btn call-btn-danger" onClick={cutCalling}>
-              Cut
+            <button className="call-btn call-btn-danger" onClick={endCall}>
+              Cancel
             </button>
           </>
         )}
@@ -409,11 +348,11 @@ const CallPanel = ({ toUserId }) => {
             <div className="call-actions">
 
               <button className="call-btn call-btn-primary" onClick={pickCall}>
-                Pick
+                Accept
               </button>
 
               <button className="call-btn call-btn-danger" onClick={rejectCall}>
-                Cut
+                Reject
               </button>
 
             </div>
@@ -426,7 +365,7 @@ const CallPanel = ({ toUserId }) => {
               In call with {peer?.name}
             </div>
 
-            <button className="call-btn call-btn-danger" onClick={cutInCall}>
+            <button className="call-btn call-btn-danger" onClick={endCall}>
               End Call
             </button>
           </>

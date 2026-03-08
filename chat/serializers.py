@@ -45,9 +45,10 @@ class MessageSerializer(serializers.ModelSerializer):
             "text",
             "file",
             "created_at",
-            "is_read"
+            "is_delivered",
+            "is_seen"
         ]
-        read_only_fields = ["id", "sender", "created_at"]
+        read_only_fields = ["id", "sender", "created_at", "is_delivered", "is_seen"]
 
 
 class CallSerializer(serializers.ModelSerializer):
